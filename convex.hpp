@@ -1,5 +1,5 @@
-#ifndef HYPERVOXEL_PHYSICS_CONVEX_HPP_
-#define HYPERVOXEL_PHYSICS_CONVEX_HPP_
+#ifndef CONVEX_HPP_
+#define CONVEX_HPP_
 
 #include <algorithm>
 #include <limits>
@@ -7,8 +7,6 @@
 
 #include "util.hpp"
 #include "vector.hpp"
-
-namespace hypervoxel {
 
 template <std::size_t N, class Attr> struct HalfSpace {
   v::DVec<N> n;
@@ -18,7 +16,6 @@ template <std::size_t N, class Attr> struct HalfSpace {
   bool contains(const v::DVec<N> &p) const { return v::dot(p, n) <= t; }
 };
 
-/// lazy me
 namespace geom {
 
 bool isSmol(double d) { return -1e-8 < d && d < 1e-8; }
@@ -203,7 +200,5 @@ template <std::size_t N, class Attr> struct Polytope {
   }
 };
 
-} // namespace hypervoxel
-
-#endif // HYPERVOXEL_PHYSICS_CONVEX_HPP_
+#endif // CONVEX_HPP_
 

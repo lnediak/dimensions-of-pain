@@ -1,7 +1,5 @@
-#ifndef HYPERVOXEL_UTIL_HPP_
-#define HYPERVOXEL_UTIL_HPP_
-
-namespace hypervoxel {
+#ifndef UTIL_HPP_
+#define UTIL_HPP_
 
 /// this is for easily passing into a gl shader
 union Color {
@@ -64,7 +62,5 @@ int fastRound(float val) {
   return ((short *)&val)[GETFLOOR_ENDIANESS_INDEX];
 }
 
-}; // namespace hypervoxel
-
-#endif // HYPERVOXEL_UTIL_HPP_
+#endif // UTIL_HPP_
 
