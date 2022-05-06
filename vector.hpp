@@ -277,12 +277,13 @@ template <class T, std::size_t N> struct Vec {
 
   Vec<T, N> &operator=(const std::initializer_list<T> &inil) {
     if (inil.size() != N) {
-      return;
+      return *this;
     }
     std::size_t i = 0;
     for (const T &val : inil) {
       data[i++] = val;
     }
+    return *this;
   }
 
   template <class U, class = UVVecSpec<U, T, N>>
@@ -348,25 +349,25 @@ template <std::size_t N> using DVec = Vec<double, N>;
 
 // -----------------------GENERIC OPERATORS-------------
 
-template <class A, class B, class = ABVVecSame<A, B>>
+template <class A, class B, class = v::ABVVecSame<A, B>>
 v::Add<typename A::value_type, A::size, A, B> operator+(const A &a,
                                                         const B &b) {
   return {a, b};
 }
 
-template <class A, class B, class = ABVVecSame<A, B>>
+template <class A, class B, class = v::ABVVecSame<A, B>>
 v::Sub<typename A::value_type, A::size, A, B> operator-(const A &a,
                                                         const B &b) {
   return {a, b};
 }
 
-template <class A, class B, class = ABVVecSame<A, B>>
+template <class A, class B, class = v::ABVVecSame<A, B>>
 v::Mult<typename A::value_type, A::size, A, B> operator*(const A &a,
                                                          const B &b) {
   return {a, b};
 }
 
-template <class A, class B, class = ABVVecSame<A, B>>
+template <class A, class B, class = v::ABVVecSame<A, B>>
 v::Div<typename A::value_type, A::size, A, B> operator/(const A &a,
                                                         const B &b) {
   return {a, b};
@@ -425,12 +426,12 @@ operator/(typename A::value_type s, const A &a) {
   return {a, s};
 }
 
-template <class A, class B, class = ABVVecSame<A, B>>
+template <class A, class B, class = v::ABVVecSame<A, B>>
 bool operator==(const A &a, const B &b) {
   return v::EqualFunctor<A, B>{}(a, b);
 }
 
-template <class A, class B, class = ABVVecSame<A, B>>
+template <class A, class B, class = v::ABVVecSame<A, B>>
 bool operator!=(const A &a, const B &b) {
   return !(a == b);
 }

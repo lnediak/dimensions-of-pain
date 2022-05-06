@@ -159,7 +159,7 @@ template <std::size_t N, class Attr> struct Polytope {
   std::vector<HalfSpace<N, Attr>> halfSpaces;
 
   bool contains(const v::DVec<N> &p) const {
-    for (const HalfSpace &h : halfSpaces) {
+    for (const HalfSpace<N, Attr> &h : halfSpaces) {
       if (!h.contains(p)) {
         return false;
       }
@@ -168,7 +168,7 @@ template <std::size_t N, class Attr> struct Polytope {
   }
 
   std::vector<v::DVec<4>> tmp;
-  template <class Fun> writeTriangles(const SliceDirs &sd, Fun &&fun) const {
+  template <class Fun> void writeTriangles(const SliceDirs<N> &sd, Fun &&fun) {
     tmp.clear();
     tmp.reserve(halfSpaces.size());
     for (auto &half : halfSpaces) {
@@ -188,7 +188,7 @@ template <std::size_t N, class Attr> struct Polytope {
       v::DVec<3> n3 = {(*it)[0], (*it)[1], (*it)[2]};
       double t3 = (*it)[3];
       v::DVec<3> a = {1, 0, 0};
-      if (isSmol(n3[1]) && isSmol(n3[2])) {
+      if (geom::isSmol(n3[1]) && geom::isSmol(n3[2])) {
         a[1] = 1;
       }
       double nor2 = v::norm2(n3);

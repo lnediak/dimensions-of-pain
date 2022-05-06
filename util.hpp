@@ -1,6 +1,8 @@
 #ifndef UTIL_HPP_
 #define UTIL_HPP_
 
+#include "vector.hpp"
+
 /// this is for easily passing into a gl shader
 union Color {
   unsigned char c[4];
