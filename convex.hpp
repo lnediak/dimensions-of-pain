@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <list>
 #include <vector>
 
 #include "util.hpp"
@@ -45,8 +46,10 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b) {
     double dt = a[0] * b[0] + a[1] * b[1];
     double da = a[0] * a[0] + a[1] * a[1];
     if (dt < 0) {
+      std::cout << "strange stats" << std::endl;
       return b[2] * da < a[2] * dt;
     }
+    std::cout << "strange stats + 2" << std::endl;
     return 2 + (b[2] * da >= a[2] * dt);
   }
   return 0;
@@ -62,6 +65,7 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   v::DVec<2> d;
   if (!getCorner(a, c, d)) {
     // e.g. a square
+    std::cout << "strange stats checkStatus 3" << std::endl;
     return 0;
   }
   double dt = b[0] * d[0] + b[1] * d[1];
@@ -76,7 +80,10 @@ struct HalfSpace2D {
   double t;
   double tmp;
   bool operator<(const HalfSpace2D &o) const { return tmp < o.tmp; }
+  v::DVec<3> as3() const { return {n[0], n[1], t}; }
 };
+/// precondition: halfs describes a bounded face
+/// returns true on success, false on infeasibility
 bool evaluateFace(std::vector<HalfSpace2D> &halfs,
                   std::vector<v::DVec<3>> &out) {
   out.clear();
@@ -86,48 +93,65 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
   }
   std::sort(halfs.begin(), halfs.end());
   // halfs has at least 3 planes cuz face is bounded
-  v::DVec<3> c = {halfs[0].n[0], halfs[0].n[1], halfs[0].t};
-  v::DVec<3> b = {halfs[1].n[0], halfs[1].n[1], halfs[1].t};
-  std::size_t i = 2, sz = halfs.size();
+  std::size_t ci = 0, bi = 1, sz = halfs.size();
   int status;
-  while ((status = checkStatus(b, c))) {
+  while ((status = checkStatus(halfs[bi].as3(), halfs[ci].as3()))) {
     switch (status) {
     case 1:
       return false;
     case 3:
-      c = b;
+      ci = bi;
     }
     // i won't go out of range cuz face is bounded
-    b = {halfs[i].n[0], halfs[i].n[1], halfs[i].t};
-    i++;
+    bi++;
   }
-  out.push_back(c);
-  v::DVec<3> a = {halfs[i].n[0], halfs[i].n[1], halfs[i].t};
-  i++;
-  for (; i < sz; i++) {
-    status = checkStatus(a, b);
+  std::list<std::size_t> outis = {ci, bi};
+  for (std::size_t ai = bi + 1; ai < sz; ai++) {
+    v::DVec<3> ha3 = halfs[ai].as3();
+    v::DVec<3> hb3 = halfs[bi].as3();
+    status = checkStatus(ha3, hb3);
     int statu;
     switch (status) {
     case 0:
-      statu = checkStatus(a, b, c);
+      statu = checkStatus(ha3, hb3, halfs[ci].as3());
       switch (statu) {
       case 0:
-        c = b;
-        out.push_back(c);
+        outis.push_back(ai);
+        ci = bi;
+        bi = ai;
         break;
       case 1:
         return false;
-      }
-      b = a;
-      a = {halfs[i].n[0], halfs[i].n[1], halfs[i].t};
-      continue;
+      default: { // case 2
+        auto itb = --outis.end();
+        auto itc = itb;
+        --itc;
+        outis.erase(itb);
+        itb = itc;
+        auto ite = outis.begin();
+        while (itb != ite) {
+          --itc;
+          status = checkStatus(ha3, halfs[*itb].as3(), halfs[*itc].as3());
+          if (!status) {
+            break;
+          }
+          if (status == 1) {
+            return false;
+          }
+          outis.erase(itb);
+          itb = itc;
+        }
+        outis.push_back(ai);
+      } // default
+      } // switch
+      break;
     case 1:
       return false;
     case 3:
-      b = a;
+      outis.back() = ai;
     }
-    a = {halfs[i].n[0], halfs[i].n[1], halfs[i].t};
   }
+  // TODO: CONTINUE AS ABOVE, OR MODIFY?
   status = checkStatus(a, b);
   int statu;
   switch (status) {
