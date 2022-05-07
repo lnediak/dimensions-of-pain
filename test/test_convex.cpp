@@ -53,8 +53,28 @@ void testGetCorner(OneIterConf iterC) {
 int slowEvalFacePoints(const std::vector<geom::HalfSpace2D> &halfs,
                        std::vector<v::DVec<3>> &out) {
   out.clear();
+  // using out as temporary data lol
+  for (const geom::HalfSpace2D &half : halfs) {
+    out.push_back(half.as3());
+  }
+  for (v::DVec<3> &e : out) {
+    e[2] = std::atan2(e[1], e[0]);
+  }
+  std::sort(out.begin(), out.end(),
+            [](const v::DVec<3> &a, const v::DVec<3> &b) -> bool {
+              return a[2] < b[2];
+            });
+  for (std::size_t i = 1, sz = out.size(); i < sz; i++) {
+    if (out[i][2] - out[i - 1][2] >= 3.1415) {
+      // unbounded
+      return 2;
+    }
+  }
+  if (out[0][2] - out.back()[2] >= -3.1416) {
+    return 2;
+  }
+  out.clear();
   std::size_t nh = halfs.size();
-  std::cout << "nh: " << nh << std::endl;
   v::DVec<2> mid{0, 0};
   for (std::size_t i = nh; i--;) {
     for (std::size_t j = i; j--;) {
@@ -76,57 +96,15 @@ int slowEvalFacePoints(const std::vector<geom::HalfSpace2D> &halfs,
     }
   }
   if (!out.size()) {
-    std::cout << "empty out?" << std::endl;
-    for (std::size_t i = nh; i--;) {
-      v::DVec<2> toadd;
-      if (geom::isSmol(halfs[i].n[0])) {
-        toadd = {0, halfs[i].t / halfs[i].n[1]};
-      } else {
-        toadd = {halfs[i].t / halfs[i].n[0], 0};
-      }
-      bool shouldAdd = true;
-      for (std::size_t k = nh; k--;) {
-        if (v::dot(toadd, halfs[k].n) > halfs[k].t + 1e-6) {
-          shouldAdd = false;
-          break;
-        }
-      }
-      if (shouldAdd) {
-        return 2;
-      }
-    }
-    std::cout << "returned 1" << std::endl;
     return 1;
   }
   mid /= out.size();
   for (std::size_t k = nh; k--;) {
     double df = v::dot(mid, halfs[k].n) - halfs[k].t;
     if (df > 1e-6) {
-      std::cout << "mid nonfunctional?" << std::endl;
       return 1;
     } else if (df > -1e-5) {
       return 3;
-    }
-  }
-  for (v::DVec<3> &e : out) {
-    e[2] = std::atan2(e[1] - mid[1], e[0] - mid[0]);
-  }
-  std::sort(out.begin(), out.end(),
-            [](const v::DVec<3> &a, const v::DVec<3> &b) -> bool {
-              return a[2] < b[2];
-            });
-  for (std::size_t i0 = out.size() - 1, i1 = 0, sz = out.size(); i1 < sz;
-       i0 = i1++) {
-    v::DVec<2> dir = {out[i1][1] - out[i0][1], out[i0][0] - out[i1][0]};
-    bool isUnb = true;
-    for (std::size_t k = nh; k--;) {
-      if (v::dot(dir, halfs[k].n) > 1e6) {
-        isUnb = false;
-        break;
-      }
-    }
-    if (isUnb) {
-      return 2;
     }
   }
   return 0;
@@ -134,8 +112,11 @@ int slowEvalFacePoints(const std::vector<geom::HalfSpace2D> &halfs,
 
 void testEvaluateFace(OneIterConf iterC) {
   std::cout << "entering testEvaluateFace" << std::endl;
-  std::uniform_int_distribution<int> disti(3, 100);
+  // std::uniform_int_distribution<int> disti(3, 20);
+  std::uniform_int_distribution<int> disti(6, 6);
   std::uniform_real_distribution<double> distr(-100, 100);
+  std::uniform_int_distribution<int> distc(0, 14);
+  std::uniform_real_distribution<double> distsmol(1, 2);
   std::vector<geom::HalfSpace2D> halfs;
   std::vector<v::DVec<3>> out0, out1;
   for (int spam = iterC.startIter; spam < iterC.endIter; spam++) {
@@ -146,22 +127,56 @@ void testEvaluateFace(OneIterConf iterC) {
     int nh = disti(mtrand);
     halfs.clear();
     for (int i = nh; i--;) {
-      v::DVec<3> randv = {distr(mtrand), distr(mtrand), distr(mtrand)};
-      while (geom::isSmol(randv[0] * randv[0] + randv[1] * randv[1])) {
+      v::DVec<3> randv;
+      int ident = distc(mtrand);
+      if (halfs.size() && ident <= 1) {
+        randv = (2 * ident - 1.) * distsmol(mtrand) *
+                halfs[mtrand() % halfs.size()].as3();
+        randv[2] = distr(mtrand);
+      } else if (ident == 2) {
+        // my beloved pathological half-planes
+        randv = {1., 2e-9 * (mtrand() % 2) - 1e-9, distr(mtrand)};
+      } else {
         randv = {distr(mtrand), distr(mtrand), distr(mtrand)};
+        while (randv[0] * randv[0] + randv[1] * randv[1] < 1e-2) {
+          randv = {distr(mtrand), distr(mtrand), distr(mtrand)};
+        }
       }
-      halfs.push_back({{randv[0], randv[1]}, randv[2]});
+      halfs.push_back({randv});
+    }
+    if (!spam) {
+      halfs = {geom::HalfSpace2D({1., 0., 1.}), geom::HalfSpace2D({0., 1., 1.}),
+               geom::HalfSpace2D({-1., 1., 1.}),
+               geom::HalfSpace2D({0., -1., 1.}),
+               geom::HalfSpace2D({2., -1., -2.})};
     }
     int res = slowEvalFacePoints(halfs, out0);
-    if (res >= 2) {
+    if (res == 2) {
+      // unbounded rip
       continue;
     }
-    std::size_t out0i = 0;
-    if (geom::evaluateFace(halfs, out1) == res) {
+    std::cout << res << std::endl;
+    std::cout << "hello world!" << std::endl;
+    bool res1 = geom::evaluateFace(halfs, out1); // false for infeasibility lol
+    std::cout << "hello world again!!!!!" << std::endl;
+    // XXX: WRITE A TEST FOR THIS CASE
+    if (res == 3) {
+      continue;
+    }
+    std::size_t out0i, sz0 = out0.size(); // goto cannot cross init lol
+    if (res1 == res) {
       std::cerr << res << std::endl;
       std::cerr << "incorrect evaluation of feasibility" << std::endl;
       goto fail;
     }
+    if (res) {
+      // infeasible, rip
+      continue;
+    }
+    for (out0i = sz0; out0i--;) {
+      out0[out0i][2] = 0; // just stealing for purposes
+    }
+    out0i = 0;
     for (std::size_t i0 = out1.size() - 1, i1 = 0, sz = out1.size(); i1 < sz;
          i0 = i1++) {
       v::DVec<2> corner;
@@ -171,25 +186,28 @@ void testEvaluateFace(OneIterConf iterC) {
         goto fail;
       }
       bool isGood = false;
-      for (std::size_t i2 = out0i, sz0 = out0.size(); i2 < sz0; i2++) {
+      for (std::size_t i2 = out0i; i2 < sz0; i2++) {
         if (v::norm2(corner - v::DVec<2>{out0[i2][0], out0[i2][1]}) < 1e-8) {
+          out0[i2][2]++;
           out0i = i2;
           isGood = true;
-          break;
         }
-      }
-      if (isGood) {
-        continue;
       }
       for (std::size_t i2 = 0; i2 < out0i; i2++) {
         if (v::norm2(corner - v::DVec<2>{out0[i2][0], out0[i2][1]}) < 1e-8) {
+          out0[i2][2]++;
           out0i = i2;
           isGood = true;
-          break;
         }
       }
       if (!isGood) {
         std::cerr << "a corner from evaluateFace is funny" << std::endl;
+        goto fail;
+      }
+    }
+    for (out0i = sz0; out0i--;) {
+      if (!out0[out0i][2]) {
+        std::cerr << "evaluateFace is missing something" << std::endl;
         goto fail;
       }
     }
@@ -202,6 +220,8 @@ void testEvaluateFace(OneIterConf iterC) {
 
 int main() {
   // testGetCorner({0, 10000000, 1000000, 1});
-  testEvaluateFace({0, 1000000, 100000, 1});
+  // testEvaluateFace({0, 1, 1, 1});
+  testEvaluateFace({1737, 10000000, 1, 1});
+  // testEvaluateFace({0, 10000000, 1000000, 1});
 }
 

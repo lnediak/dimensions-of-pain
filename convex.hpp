@@ -46,10 +46,8 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b) {
     double dt = a[0] * b[0] + a[1] * b[1];
     double da = a[0] * a[0] + a[1] * a[1];
     if (dt < 0) {
-      std::cout << "strange stats" << std::endl;
       return b[2] * da < a[2] * dt;
     }
-    std::cout << "strange stats + 2" << std::endl;
     return 2 + (b[2] * da >= a[2] * dt);
   }
   return 0;
@@ -65,7 +63,6 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   v::DVec<2> d;
   if (!getCorner(a, c, d)) {
     // e.g. a square
-    std::cout << "strange stats checkStatus 3" << std::endl;
     return 0;
   }
   double dt = b[0] * d[0] + b[1] * d[1];
@@ -87,50 +84,57 @@ struct HalfSpace2D {
   v::DVec<3> as3() const { return {n[0], n[1], t}; }
 };
 /// assumes ptr has nextp and prevp set up, links to bounded face
+template <HalfSpace2D *HalfSpace2D::*nextp = &HalfSpace2D::nextp,
+          HalfSpace2D *HalfSpace2D::*prevp = &HalfSpace2D::prevp>
 HalfSpace2D *clearCheckStat2(HalfSpace2D *ptr) {
   while (true) {
-    int status = checkStatus(ptr->nextp->as3(), ptr->as3());
+    int status = checkStatus((ptr->*nextp)->as3(), ptr->as3());
     switch (status) {
     case 0:
       return ptr;
     case 1:
       return nullptr;
     case 2:
-      ptr->nextp = ptr->nextp->nextp;
-      ptr->nextp->prevp = ptr;
+      ptr->*nextp = ptr->*nextp->*nextp;
+      ptr->*nextp->*prevp = ptr;
       break;
     default: // case 3
-      ptr->prevp->nextp = ptr->nextp;
-      ptr->nextp->prevp = ptr->prevp;
-      ptr = ptr->nextp;
+      ptr->*prevp->*nextp = ptr->*nextp;
+      ptr->*nextp->*prevp = ptr->*prevp;
+      ptr = ptr->*nextp;
     }
   }
   return ptr;
 }
-/// ptr points to `b` as passed to checkStatus, output of which is returned
-int doCheckStat3(HalfSpace2D *ptr) {
-  int status = checkStatus(ptr->nextp->as3(), ptr->as3(), ptr->prevp->as3());
-  if (status == 2) {
-    ptr->prevp->nextp = ptr->nextp;
-    ptr->nextp->prevp = ptr->prevp;
-  }
-  return status;
-}
+/// ptr points to `b` as passed to checkStatus
+template <HalfSpace2D *HalfSpace2D::*prevp = &HalfSpace2D::prevp>
 HalfSpace2D *clearCheckStat3(HalfSpace2D *ptr, HalfSpace2D *begp) {
   while (ptr != begp) {
-    int status = doCheckStat3(ptr);
+    int status = checkStatus(ptr->nextp->as3(), ptr->as3(), ptr->prevp->as3());
     switch (status) {
     case 0:
       return ptr;
     case 1:
       return nullptr;
     default: // case 2
-      ptr = ptr->prevp;
+      ptr->prevp->nextp = ptr->nextp;
+      ptr->nextp->prevp = ptr->prevp;
+      ptr = ptr->*prevp;
     }
   }
   return ptr;
 }
-/// precondition: halfs describes a bounded face
+/// for debugging, obviously
+void printHalfs(HalfSpace2D *ptr) {
+  std::cout << "halfs: " << std::endl;
+  HalfSpace2D *p = ptr;
+  do {
+    std::cout << p->as3() << std::endl;
+    p = p->nextp;
+  } while (p != ptr);
+  std::cout << std::endl;
+}
+/// precondition: halfs describes a bounded face or is infeasible
 /// returns true on success, false on infeasibility
 bool evaluateFace(std::vector<HalfSpace2D> &halfs,
                   std::vector<v::DVec<3>> &out) {
@@ -144,26 +148,48 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
     halfs[pi].nextp = &halfs[ni];
   }
   HalfSpace2D *begp = &halfs[0];
+  printHalfs(begp);
   begp = clearCheckStat2(begp);
   if (!begp) {
     return false;
   }
-  HalfSpace2D *bptr = begp;
-  do {
-    bptr = bptr->nextp;
+  // this is only necessary for a pathological case
+  begp = clearCheckStat2<&HalfSpace2D::prevp, &HalfSpace2D::nextp>(begp);
+  if (!begp) {
+    return false;
+  }
+  printHalfs(begp);
+  HalfSpace2D *bptr = begp->nextp;
+  while (bptr != begp) {
+    printHalfs(begp);
     bptr = clearCheckStat2(bptr);
     if (!bptr) {
       return false;
     }
+    bptr = bptr->nextp;
+  }
+  printHalfs(begp);
+  std::cout << "entering clearCheckStat3 loop" << std::endl;
+  bptr = bptr->nextp;
+  while (bptr != begp) {
+    printHalfs(begp);
     bptr = clearCheckStat3(bptr, begp);
     if (!bptr) {
       return false;
     }
-  } while (bptr != begp);
+    bptr = bptr->nextp;
+  }
+  std::cout << "left loop" << std::endl;
+  printHalfs(begp);
   begp = clearCheckStat3(begp, nullptr);
   if (!begp) {
     return false;
   }
+  begp = clearCheckStat3<&HalfSpace2D::nextp>(begp->nextp, nullptr);
+  if (!begp) {
+    return false;
+  }
+  printHalfs(begp);
   out.clear();
   HalfSpace2D *ptr = begp;
   do {
