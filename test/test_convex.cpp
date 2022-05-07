@@ -95,6 +95,7 @@ int slowEvalFacePoints(const std::vector<geom::HalfSpace2D> &halfs,
         return 2;
       }
     }
+    std::cout << "returned 1" << std::endl;
     return 1;
   }
   mid /= out.size();
@@ -149,7 +150,7 @@ void testEvaluateFace(OneIterConf iterC) {
       while (geom::isSmol(randv[0] * randv[0] + randv[1] * randv[1])) {
         randv = {distr(mtrand), distr(mtrand), distr(mtrand)};
       }
-      halfs.push_back({{randv[0], randv[1]}, randv[2], 0});
+      halfs.push_back({{randv[0], randv[1]}, randv[2]});
     }
     int res = slowEvalFacePoints(halfs, out0);
     if (res >= 2) {

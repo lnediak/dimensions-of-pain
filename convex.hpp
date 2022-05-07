@@ -75,104 +75,101 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   // because the face is bounded
   return dt > b[2];
 }
+/// helper class
 struct HalfSpace2D {
   v::DVec<2> n;
   double t;
   double tmp;
+  HalfSpace2D *nextp, *prevp;
+  HalfSpace2D(const v::DVec<2> &n, double t) : n(n), t(t) {}
+  HalfSpace2D(const v::DVec<3> &abt) : n{abt[0], abt[1]}, t(abt[2]) {}
   bool operator<(const HalfSpace2D &o) const { return tmp < o.tmp; }
   v::DVec<3> as3() const { return {n[0], n[1], t}; }
 };
+/// assumes ptr has nextp and prevp set up, links to bounded face
+HalfSpace2D *clearCheckStat2(HalfSpace2D *ptr) {
+  while (true) {
+    int status = checkStatus(ptr->nextp->as3(), ptr->as3());
+    switch (status) {
+    case 0:
+      return ptr;
+    case 1:
+      return nullptr;
+    case 2:
+      ptr->nextp = ptr->nextp->nextp;
+      ptr->nextp->prevp = ptr;
+      break;
+    default: // case 3
+      ptr->prevp->nextp = ptr->nextp;
+      ptr->nextp->prevp = ptr->prevp;
+      ptr = ptr->nextp;
+    }
+  }
+  return ptr;
+}
+/// ptr points to `b` as passed to checkStatus, output of which is returned
+int doCheckStat3(HalfSpace2D *ptr) {
+  int status = checkStatus(ptr->nextp->as3(), ptr->as3(), ptr->prevp->as3());
+  if (status == 2) {
+    ptr->prevp->nextp = ptr->nextp;
+    ptr->nextp->prevp = ptr->prevp;
+  }
+  return status;
+}
+HalfSpace2D *clearCheckStat3(HalfSpace2D *ptr, HalfSpace2D *begp) {
+  while (ptr != begp) {
+    int status = doCheckStat3(ptr);
+    switch (status) {
+    case 0:
+      return ptr;
+    case 1:
+      return nullptr;
+    default: // case 2
+      ptr = ptr->prevp;
+    }
+  }
+  return ptr;
+}
 /// precondition: halfs describes a bounded face
 /// returns true on success, false on infeasibility
 bool evaluateFace(std::vector<HalfSpace2D> &halfs,
                   std::vector<v::DVec<3>> &out) {
-  out.clear();
-  out.reserve(halfs.size());
   for (HalfSpace2D &half : halfs) {
     half.tmp = getAngleThing(half.n);
   }
   std::sort(halfs.begin(), halfs.end());
-  // halfs has at least 3 planes cuz face is bounded
-  std::size_t ci = 0, bi = 1, sz = halfs.size();
-  int status;
-  while ((status = checkStatus(halfs[bi].as3(), halfs[ci].as3()))) {
-    switch (status) {
-    case 1:
-      return false;
-    case 3:
-      ci = bi;
-    }
-    // i won't go out of range cuz face is bounded
-    bi++;
+  // i love circular doubly linked lists
+  for (std::size_t ni = 0, pi = halfs.size(); pi--; ni = pi) {
+    halfs[ni].prevp = &halfs[pi];
+    halfs[pi].nextp = &halfs[ni];
   }
-  std::list<std::size_t> outis = {ci, bi};
-  for (std::size_t ai = bi + 1; ai < sz; ai++) {
-    v::DVec<3> ha3 = halfs[ai].as3();
-    v::DVec<3> hb3 = halfs[bi].as3();
-    status = checkStatus(ha3, hb3);
-    int statu;
-    switch (status) {
-    case 0:
-      statu = checkStatus(ha3, hb3, halfs[ci].as3());
-      switch (statu) {
-      case 0:
-        outis.push_back(ai);
-        ci = bi;
-        bi = ai;
-        break;
-      case 1:
-        return false;
-      default: { // case 2
-        auto itb = --outis.end();
-        auto itc = itb;
-        --itc;
-        outis.erase(itb);
-        itb = itc;
-        auto ite = outis.begin();
-        while (itb != ite) {
-          --itc;
-          status = checkStatus(ha3, halfs[*itb].as3(), halfs[*itc].as3());
-          if (!status) {
-            break;
-          }
-          if (status == 1) {
-            return false;
-          }
-          outis.erase(itb);
-          itb = itc;
-        }
-        outis.push_back(ai);
-      } // default
-      } // switch
-      break;
-    case 1:
-      return false;
-    case 3:
-      outis.back() = ai;
-    }
-  }
-  // TODO: CONTINUE AS ABOVE, OR MODIFY?
-  status = checkStatus(a, b);
-  int statu;
-  switch (status) {
-  case 0:
-    statu = checkStatus(a, b, c);
-    switch (statu) {
-    case 0:
-      out.push_back(b);
-      break;
-    case 1:
-      return false;
-    }
-    out.push_back(a);
-    return true;
-  case 1:
+  HalfSpace2D *begp = &halfs[0];
+  begp = clearCheckStat2(begp);
+  if (!begp) {
     return false;
-  case 2:
-    out.push_back(b);
-    return true;
   }
-  out.push_back(a);
+  HalfSpace2D *bptr = begp;
+  do {
+    bptr = bptr->nextp;
+    bptr = clearCheckStat2(bptr);
+    if (!bptr) {
+      return false;
+    }
+    bptr = clearCheckStat3(bptr, begp);
+    if (!bptr) {
+      return false;
+    }
+  } while (bptr != begp);
+  begp = clearCheckStat3(begp, nullptr);
+  if (!begp) {
+    return false;
+  }
+  out.clear();
+  HalfSpace2D *ptr = begp;
+  do {
+    out.push_back(ptr->as3());
+    ptr = ptr->nextp;
+  } while (ptr != begp);
   return true;
 }
 
