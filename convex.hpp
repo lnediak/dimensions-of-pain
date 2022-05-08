@@ -148,7 +148,6 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
     halfs[pi].nextp = &halfs[ni];
   }
   HalfSpace2D *begp = &halfs[0];
-  printHalfs(begp);
   begp = clearCheckStat2(begp);
   if (!begp) {
     return false;
@@ -158,38 +157,41 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
   if (!begp) {
     return false;
   }
-  printHalfs(begp);
   HalfSpace2D *bptr = begp->nextp;
   while (bptr != begp) {
-    printHalfs(begp);
     bptr = clearCheckStat2(bptr);
     if (!bptr) {
       return false;
     }
     bptr = bptr->nextp;
   }
-  printHalfs(begp);
-  std::cout << "entering clearCheckStat3 loop" << std::endl;
   bptr = bptr->nextp;
   while (bptr != begp) {
-    printHalfs(begp);
     bptr = clearCheckStat3(bptr, begp);
     if (!bptr) {
       return false;
     }
     bptr = bptr->nextp;
   }
-  std::cout << "left loop" << std::endl;
-  printHalfs(begp);
-  begp = clearCheckStat3(begp, nullptr);
-  if (!begp) {
+  HalfSpace2D *tmp = clearCheckStat3(begp, nullptr);
+  if (!tmp) {
     return false;
   }
-  begp = clearCheckStat3<&HalfSpace2D::nextp>(begp->nextp, nullptr);
-  if (!begp) {
-    return false;
+  // now we know that it is feasible yay
+  bool isClear = tmp == begp;
+  bool isCtmp;
+  if (!isClear) {
+    while (true) {
+      begp = clearCheckStat3<&HalfSpace2D::nextp>(tmp->nextp, nullptr);
+      if ((isCtmp = tmp->nextp == begp) && isClear) {
+        break;
+      }
+      tmp = clearCheckStat3(begp->prevp, nullptr);
+      if ((isClear = tmp == begp->prevp) && isCtmp) {
+        break;
+      }
+    }
   }
-  printHalfs(begp);
   out.clear();
   HalfSpace2D *ptr = begp;
   do {
