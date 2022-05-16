@@ -112,8 +112,8 @@ int slowEvalFacePoints(const std::vector<geom::HalfSpace2D> &halfs,
 
 void testEvaluateFace(OneIterConf iterC) {
   std::cout << "entering testEvaluateFace" << std::endl;
-  std::uniform_int_distribution<int> disti(3, 20);
-  // std::uniform_int_distribution<int> disti(6, 6);
+  // std::uniform_int_distribution<int> disti(3, 20);
+  std::uniform_int_distribution<int> disti(7, 7);
   std::uniform_real_distribution<double> distr(-100, 100);
   std::uniform_int_distribution<int> distc(0, 14);
   std::uniform_real_distribution<double> distsmol(1, 2);
@@ -143,6 +143,7 @@ void testEvaluateFace(OneIterConf iterC) {
         }
       }
       halfs.push_back({randv});
+      std::cout << randv << std::endl;
     }
     int res = slowEvalFacePoints(halfs, out0);
     if (res == 2) {
@@ -211,8 +212,9 @@ void testEvaluateFace(OneIterConf iterC) {
 
 int main() {
   // testGetCorner({0, 10000000, 1000000, 1});
+
   // testEvaluateFace({0, 1, 1, 1});
-  // testEvaluateFace({1737, 10000000, 1, 1});
-  testEvaluateFace({0, 10000000, 1000000, 1});
+  testEvaluateFace({82225, 10000000, 1, 1});
+  // testEvaluateFace({0, 10000000, 1000000, 1});
 }
 
