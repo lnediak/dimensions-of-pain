@@ -148,15 +148,18 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
     halfs[pi].nextp = &halfs[ni];
   }
   HalfSpace2D *begp = &halfs[0];
+  printHalfs(begp);
   begp = clearCheckStat2(begp);
   if (!begp) {
     return false;
   }
+  printHalfs(begp);
   // this is only necessary for a pathological case
   begp = clearCheckStat2<&HalfSpace2D::prevp, &HalfSpace2D::nextp>(begp);
   if (!begp) {
     return false;
   }
+  printHalfs(begp);
   HalfSpace2D *bptr = begp->nextp;
   while (bptr != begp) {
     bptr = clearCheckStat2(bptr);
@@ -165,6 +168,7 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
     }
     bptr = bptr->nextp;
   }
+  printHalfs(bptr);
   bptr = bptr->nextp;
   while (bptr != begp) {
     bptr = clearCheckStat3(bptr, begp);
@@ -180,20 +184,23 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
   // now we know that it is feasible yay
   bool isClear = tmp == begp;
   bool isCtmp;
+  HalfSpace2D *ptr;
   if (!isClear) {
     while (true) {
-      begp = clearCheckStat3<&HalfSpace2D::nextp>(tmp->nextp, nullptr);
-      if ((isCtmp = tmp->nextp == begp) && isClear) {
+      ptr = tmp->nextp;
+      begp = clearCheckStat3<&HalfSpace2D::nextp>(ptr, nullptr);
+      if ((isCtmp = ptr == begp) && isClear) {
         break;
       }
-      tmp = clearCheckStat3(begp->prevp, nullptr);
-      if ((isClear = tmp == begp->prevp) && isCtmp) {
+      ptr = begp->prevp;
+      tmp = clearCheckStat3(ptr, nullptr);
+      if ((isClear = ptr == tmp) && isCtmp) {
         break;
       }
     }
   }
   out.clear();
-  HalfSpace2D *ptr = begp;
+  ptr = begp;
   do {
     out.push_back(ptr->as3());
     ptr = ptr->nextp;
@@ -250,4 +257,3 @@ template <std::size_t N, class Attr> struct Polytope {
 };
 
 #endif // CONVEX_HPP_
-
