@@ -49,7 +49,7 @@ void testGetCorner(OneIterConf iterC) {
 }
 
 /// 0 - succcess, 1 - infeasible, 2 - unbounded, 3 - questionable feasibility
-/// out[k][2] are all irrelevant btw
+/// out[k][2] will be 0 for mandatory, 1 for questionable
 int slowEvalFacePoints(const std::vector<geom::HalfSpace2D> &halfs,
                        std::vector<v::DVec<3>> &out) {
   out.clear();
@@ -90,7 +90,10 @@ int slowEvalFacePoints(const std::vector<geom::HalfSpace2D> &halfs,
         }
       }
       if (shouldAdd) {
-        out.push_back({toadd[0], toadd[1], 0});
+        out.push_back({toadd[0], toadd[1],
+                       static_cast<double>(geom::isSmol(
+                           1e-2 * (halfs[j].n[0] * halfs[i].n[1] -
+                                   halfs[j].n[1] * halfs[i].n[0])))});
         mid += toadd;
       }
     }
@@ -115,7 +118,7 @@ void testEvaluateFace(OneIterConf iterC) {
   std::uniform_int_distribution<int> disti(3, 20);
   // std::uniform_int_distribution<int> disti(7, 7);
   std::uniform_real_distribution<double> distr(-100, 100);
-  std::uniform_int_distribution<int> distc(0, 14);
+  std::uniform_int_distribution<int> distc(0, 23);
   std::uniform_real_distribution<double> distsmol(1, 2);
   std::vector<geom::HalfSpace2D> halfs;
   std::vector<v::DVec<3>> out0, out1;
@@ -129,11 +132,16 @@ void testEvaluateFace(OneIterConf iterC) {
     for (int i = nh; i--;) {
       v::DVec<3> randv;
       int ident = distc(mtrand);
-      if (halfs.size() && ident <= 1) {
-        randv = (2 * ident - 1.) * distsmol(mtrand) *
+      if (halfs.size() && ident <= 3) {
+        randv = (2 * (ident % 2) - 1.) * distsmol(mtrand) *
                 halfs[mtrand() % halfs.size()].as3();
-        randv[2] = distr(mtrand);
-      } else if (ident == 2) {
+        randv[1] += distr(mtrand) * 1e-9;
+        if (ident < 2) {
+          randv[2] = distr(mtrand);
+        } else {
+          randv[2] += distr(mtrand) * 1e-9;
+        }
+      } else if (ident <= 5) {
         // my beloved pathological half-planes
         randv = {1., 2e-9 * (mtrand() % 2) - 1e-9, distr(mtrand)};
       } else {
@@ -213,6 +221,6 @@ int main() {
   // testGetCorner({0, 10000000, 1000000, 1});
 
   // testEvaluateFace({0, 1, 1, 1});
-  testEvaluateFace({234049, 10000000, 1, 1});
-  // testEvaluateFace({0, 10000000, 1000000, 1});
+  testEvaluateFace({246, 10000000, 1, 1});
+  // testEvaluateFace({0, 10000000, 100000, 1});
 }

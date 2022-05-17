@@ -83,25 +83,39 @@ struct HalfSpace2D {
   bool operator<(const HalfSpace2D &o) const { return tmp < o.tmp; }
   v::DVec<3> as3() const { return {n[0], n[1], t}; }
 };
+/// for debugging, obviously
+void printHalfs(HalfSpace2D *ptr) {
+  std::cout << "halfs: " << std::endl;
+  HalfSpace2D *p = ptr;
+  do {
+    std::cout << p->as3() << std::endl;
+    p = p->nextp;
+  } while (p != ptr);
+  std::cout << std::endl;
+}
 /// assumes ptr has nextp and prevp set up, links to bounded face
-template <HalfSpace2D *HalfSpace2D::*nextp = &HalfSpace2D::nextp,
-          HalfSpace2D *HalfSpace2D::*prevp = &HalfSpace2D::prevp>
-HalfSpace2D *clearCheckStat2(HalfSpace2D *ptr) {
+HalfSpace2D *clearCheckStat2(HalfSpace2D *ptr, HalfSpace2D **begp) {
   while (true) {
-    int status = checkStatus((ptr->*nextp)->as3(), ptr->as3());
+    int status = checkStatus(ptr->nextp->as3(), ptr->as3());
     switch (status) {
     case 0:
       return ptr;
     case 1:
       return nullptr;
     case 2:
-      ptr->*nextp = ptr->*nextp->*nextp;
-      ptr->*nextp->*prevp = ptr;
+      if (ptr->nextp == *begp) {
+        *begp = ptr;
+      }
+      ptr->nextp = ptr->nextp->nextp;
+      ptr->nextp->prevp = ptr;
       break;
     default: // case 3
-      ptr->*prevp->*nextp = ptr->*nextp;
-      ptr->*nextp->*prevp = ptr->*prevp;
-      ptr = ptr->*nextp;
+      if (ptr == *begp) {
+        *begp = ptr->nextp;
+      }
+      ptr->prevp->nextp = ptr->nextp;
+      ptr->nextp->prevp = ptr->prevp;
+      ptr = ptr->nextp;
     }
   }
   return ptr;
@@ -124,16 +138,6 @@ HalfSpace2D *clearCheckStat3(HalfSpace2D *ptr, HalfSpace2D *begp) {
   }
   return ptr;
 }
-/// for debugging, obviously
-void printHalfs(HalfSpace2D *ptr) {
-  std::cout << "halfs: " << std::endl;
-  HalfSpace2D *p = ptr;
-  do {
-    std::cout << p->as3() << std::endl;
-    p = p->nextp;
-  } while (p != ptr);
-  std::cout << std::endl;
-}
 /// precondition: halfs describes a bounded face or is infeasible
 /// returns true on success, false on infeasibility
 bool evaluateFace(std::vector<HalfSpace2D> &halfs,
@@ -148,27 +152,18 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
     halfs[pi].nextp = &halfs[ni];
   }
   HalfSpace2D *begp = &halfs[0];
-  printHalfs(begp);
-  begp = clearCheckStat2(begp);
+  begp = clearCheckStat2(begp, &begp);
   if (!begp) {
     return false;
   }
-  printHalfs(begp);
-  // this is only necessary for a pathological case
-  begp = clearCheckStat2<&HalfSpace2D::prevp, &HalfSpace2D::nextp>(begp);
-  if (!begp) {
-    return false;
-  }
-  printHalfs(begp);
   HalfSpace2D *bptr = begp->nextp;
   while (bptr != begp) {
-    bptr = clearCheckStat2(bptr);
+    bptr = clearCheckStat2(bptr, &begp);
     if (!bptr) {
       return false;
     }
     bptr = bptr->nextp;
   }
-  printHalfs(bptr);
   bptr = bptr->nextp;
   while (bptr != begp) {
     bptr = clearCheckStat3(bptr, begp);
@@ -176,6 +171,9 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
       return false;
     }
     bptr = bptr->nextp;
+  }
+  if (begp == begp->nextp) {
+    return false;
   }
   HalfSpace2D *tmp = clearCheckStat3(begp, nullptr);
   if (!tmp) {
