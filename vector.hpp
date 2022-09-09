@@ -191,59 +191,63 @@ using ABVVecSame =
 // -----------------------FUNCTIONS----------------------
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-typename A::value_type sum(const A &a) {
-  return Sum<typename A::value_type, A::size, A>(a).evaluate();
+typename rem_cvr<A>::value_type sum(A &&a) {
+  return Sum<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>(a)
+      .evaluate();
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-typename A::value_type product(const A &a) {
-  return Product<typename A::value_type, A::size, A>(a).evaluate();
+typename rem_cvr<A>::value_type product(A &&a) {
+  return Product<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>(a)
+      .evaluate();
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-typename A::value_type min(const A &a) {
-  return Min<typename A::value_type, A::size, A>(a).evaluate();
+typename rem_cvr<A>::value_type min(A &&a) {
+  return Min<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>(a)
+      .evaluate();
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-typename A::value_type max(const A &a) {
-  return Max<typename A::value_type, A::size, A>(a).evaluate();
+typename rem_cvr<A>::value_type max(A &&a) {
+  return Max<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>(a)
+      .evaluate();
 }
 
 template <class A, class B, class = ABVVecSame<A, B>>
-ElementwiseMin<typename A::value_type, A::size, A, B>
-elementwiseMin(const A &a, const B &b) {
+ElementwiseMin<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A, B>
+elementwiseMin(A &&a, B &&b) {
   return {a, b};
 }
 
 template <class A, class B, class = ABVVecSame<A, B>>
-ElementwiseMax<typename A::value_type, A::size, A, B>
-elementwiseMax(const A &a, const B &b) {
+ElementwiseMax<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A, B>
+elementwiseMax(A &&a, B &&b) {
   return {a, b};
 }
 
 template <class A, class B, class = ABVVecSame<A, B>>
-typename A::value_type dot(const A &a, const B &b) {
+typename rem_cvr<A>::value_type dot(A &&a, B &&b) {
   return sum(a * b);
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-typename A::value_type norm2(const A &a) {
+typename rem_cvr<A>::value_type norm2(A &&a) {
   return sum(a * a);
 }
 
 template <class A, class B, class = ABVVecSame<A, B>>
-typename A::value_type dist2(const A &a, const B &b) {
+typename rem_cvr<A>::value_type dist2(A &&a, B &&b) {
   return norm2(a - b);
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-Abs<typename A::value_type, A::size, A> vabs(const A &a) {
+Abs<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A> vabs(A &&a) {
   return {a};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-typename A::value_type norm1(const A &a) {
+typename rem_cvr<A>::value_type norm1(A &&a) {
   return sum(vabs(a));
 }
 
@@ -345,104 +349,142 @@ template <std::size_t N> using IVec = Vec<std::int32_t, N>;
 template <std::size_t N> using FVec = Vec<float, N>;
 template <std::size_t N> using DVec = Vec<double, N>;
 
+// Source: https://en.wikipedia.org/wiki/MurmurHash
+template <std::size_t N> struct IVecHash {
+
+protected:
+  std::uint32_t murmurscram(std::uint32_t val) const noexcept {
+    val *= 0xcc9e2d51;
+    val = (val << 15) | (val >> 17);
+    val *= 0x1b873593;
+    return val;
+  }
+
+  std::uint32_t murmurstep(std::uint32_t h, std::uint32_t val) const noexcept {
+    h ^= murmurscram(val);
+    h = (h << 13) | (h >> 19);
+    return h * 5 + 0xe6546b64;
+  }
+
+public:
+  std::uint32_t impl(const std::int32_t *argp) const noexcept {
+    return murmurstep(IVecHash<N - 1>().impl(argp), argp[N - 1]);
+  }
+
+  std::size_t operator()(const IVec<N> &arg) const noexcept {
+    return IVecHash<N - 1>().impl(&arg[0]) ^ murmurscram(arg[N - 1]);
+  }
+};
+template <> struct IVecHash<1> : protected IVecHash<2> {
+
+  std::uint32_t impl(const std::int32_t *argp) const noexcept {
+    return murmurstep(0 /* seed */, argp[0]);
+  }
+
+  std::size_t operator()(const IVec<1> &arg) const noexcept {
+    return murmurscram(arg[0]);
+  }
+};
+
 } // namespace v
 
 // -----------------------GENERIC OPERATORS-------------
 
 template <class A, class B, class = v::ABVVecSame<A, B>>
-v::Add<typename A::value_type, A::size, A, B> operator+(const A &a,
-                                                        const B &b) {
+v::Add<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A, B>
+operator+(A &&a, B &&b) noexcept {
   return {a, b};
 }
 
 template <class A, class B, class = v::ABVVecSame<A, B>>
-v::Sub<typename A::value_type, A::size, A, B> operator-(const A &a,
-                                                        const B &b) {
+v::Sub<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A, B>
+operator-(A &&a, B &&b) noexcept {
   return {a, b};
 }
 
 template <class A, class B, class = v::ABVVecSame<A, B>>
-v::Mult<typename A::value_type, A::size, A, B> operator*(const A &a,
-                                                         const B &b) {
+v::Mult<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A, B>
+operator*(A &&a, B &&b) noexcept {
   return {a, b};
 }
 
 template <class A, class B, class = v::ABVVecSame<A, B>>
-v::Div<typename A::value_type, A::size, A, B> operator/(const A &a,
-                                                        const B &b) {
+v::Div<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A, B>
+operator/(A &&a, B &&b) noexcept {
   return {a, b};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::UnaryNeg<typename A::value_type, A::size, A> operator-(const A &a) {
+v::UnaryNeg<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator-(A &&a) noexcept {
   return {a};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::SAdd<typename A::value_type, A::size, A>
-operator+(const A &a, typename A::value_type s) {
+v::SAdd<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator+(A &&a, typename rem_cvr<A>::value_type s) noexcept {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::SAdd<typename A::value_type, A::size, A> operator+(typename A::value_type s,
-                                                      const A &a) {
+v::SAdd<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator+(typename rem_cvr<A>::value_type s, A &&a) noexcept {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::SSub<typename A::value_type, A::size, A>
-operator-(const A &a, typename A::value_type s) {
+v::SSub<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator-(A &&a, typename rem_cvr<A>::value_type s) noexcept {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::ReverseSSub<typename A::value_type, A::size, A>
-operator-(typename A::value_type s, const A &a) {
+v::ReverseSSub<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator-(typename rem_cvr<A>::value_type s, A &&a) noexcept {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::SMult<typename A::value_type, A::size, A>
-operator*(const A &a, typename A::value_type s) {
+v::SMult<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator*(A &&a, typename rem_cvr<A>::value_type s) noexcept {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::SMult<typename A::value_type, A::size, A> operator*(typename A::value_type s,
-                                                       const A &a) {
+v::SMult<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator*(typename rem_cvr<A>::value_type s, A &&a) noexcept {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::SDiv<typename A::value_type, A::size, A>
-operator/(const A &a, typename A::value_type s) {
+v::SDiv<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator/(A &&a, typename rem_cvr<A>::value_type s) noexcept {
   return {a, s};
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-v::ReverseSDiv<typename A::value_type, A::size, A>
-operator/(typename A::value_type s, const A &a) {
+v::ReverseSDiv<typename rem_cvr<A>::value_type, rem_cvr<A>::size, A>
+operator/(typename rem_cvr<A>::value_type s, A &&a) noexcept {
   return {a, s};
 }
 
 template <class A, class B, class = v::ABVVecSame<A, B>>
-bool operator==(const A &a, const B &b) {
+bool operator==(A &&a, B &&b) noexcept {
   return v::EqualFunctor<A, B>{}(a, b);
 }
 
 template <class A, class B, class = v::ABVVecSame<A, B>>
-bool operator!=(const A &a, const B &b) {
+bool operator!=(A &&a, B &&b) noexcept {
   return !(a == b);
 }
 
 template <class A, class = typename rem_cvr<A>::thisisavvec>
-std::ostream &operator<<(std::ostream &os, const A &a) {
+std::ostream &operator<<(std::ostream &os, A &&a) {
   os << "v[";
-  for (std::size_t i = 0; i < A::size - 1; i++) {
+  for (std::size_t i = 0; i < rem_cvr<A>::size - 1; i++) {
     os << a[i] << " ";
   }
-  os << a[A::size - 1] << "] ";
+  os << a[rem_cvr<A>::size - 1] << "] ";
   return os;
 }
 

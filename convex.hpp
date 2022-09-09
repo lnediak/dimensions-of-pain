@@ -19,7 +19,7 @@ template <std::size_t N, class Attr> struct HalfSpace {
 
 namespace geom {
 
-bool isSmol(double d) { return -1e-8 < d && d < 1e-8; }
+bool isSmol(double d) { return -1e-5 < d && d < 1e-5; }
 
 /// my vec3s are just [a, b, t] where ax+by<=t is the half-space represented
 bool getCorner(const v::DVec<3> &e0, const v::DVec<3> &e1, v::DVec<2> &out) {
@@ -57,6 +57,9 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b) {
 int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   int acstat = checkStatus(a, c);
   if (acstat) {
+    if (acstat == 1) {
+      return 1;
+    }
     // because the face is bounded
     return 2;
   }
@@ -65,7 +68,10 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
     // e.g. a square
     return 0;
   }
+  std::cout << "checkStatus: " << a << b << c << std::endl;
+  std::cout << "d: " << d << std::endl;
   double dt = b[0] * d[0] + b[1] * d[1];
+  std::cout << "dt: " << dt << std::endl;
   if (a[0] * c[1] - a[1] * c[0] < 0) {
     return 2 * (dt <= b[2]);
   }
@@ -125,6 +131,7 @@ template <HalfSpace2D *HalfSpace2D::*prevp = &HalfSpace2D::prevp>
 HalfSpace2D *clearCheckStat3(HalfSpace2D *ptr, HalfSpace2D *begp) {
   while (ptr != begp) {
     int status = checkStatus(ptr->nextp->as3(), ptr->as3(), ptr->prevp->as3());
+    std::cout << "status: " << status << std::endl;
     switch (status) {
     case 0:
       return ptr;
@@ -140,8 +147,8 @@ HalfSpace2D *clearCheckStat3(HalfSpace2D *ptr, HalfSpace2D *begp) {
 }
 /// precondition: halfs describes a bounded face or is infeasible
 /// returns true on success, false on infeasibility
-bool evaluateFace(std::vector<HalfSpace2D> &halfs,
-                  std::vector<v::DVec<3>> &out) {
+/// out is a vector of indices in halfs (as it is after the function)
+bool evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
   for (HalfSpace2D &half : halfs) {
     half.tmp = getAngleThing(half.n);
   }
@@ -152,6 +159,7 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
     halfs[pi].nextp = &halfs[ni];
   }
   HalfSpace2D *begp = &halfs[0];
+  printHalfs(begp);
   begp = clearCheckStat2(begp, &begp);
   if (!begp) {
     return false;
@@ -175,6 +183,7 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
   if (begp == begp->nextp) {
     return false;
   }
+  printHalfs(begp);
   HalfSpace2D *tmp = clearCheckStat3(begp, nullptr);
   if (!tmp) {
     return false;
@@ -199,8 +208,9 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs,
   }
   out.clear();
   ptr = begp;
+  printHalfs(ptr);
   do {
-    out.push_back(ptr->as3());
+    out.push_back(ptr - &halfs[0]);
     ptr = ptr->nextp;
   } while (ptr != begp);
   return true;

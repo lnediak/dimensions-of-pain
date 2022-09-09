@@ -1,8 +1,11 @@
 INCLUDES = -I..
-CXX = g++ $(INCLUDES) --std=c++11 -Wall -Wextra -pedantic -g3 -O2
+CXX = ccache g++ $(INCLUDES) --std=c++11 -Wall -Wextra -pedantic -g3 -O2
 
-all: test_convex
+all: _test_convex
 
-test_convex: test_convex.cpp ../*.hpp
+_test_convex: test_convex.cpp ../*.hpp
 	$(CXX) -o $@ $<
+
+clean:
+	rm _test_convex
 
