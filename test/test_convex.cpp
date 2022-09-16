@@ -10,6 +10,8 @@
 #include "convex.hpp"
 #include "union_find.hpp"
 
+#define DEBUG_PRINT(...) std::cout << __VA_ARGS__ << std::endl
+
 struct OneIterConf {
   int startIter, endIter, iterPrintTick, seed;
 };
@@ -53,6 +55,33 @@ void testGetCorner(OneIterConf iterC) {
   }
 }
 
+double clampHelp(double val) {
+  if (val > 1e9) {
+    return 1e9;
+  }
+  if (val < -1e9) {
+    return -1e9;
+  }
+  return val;
+}
+bool absurdCorner(const geom::HalfSpace2D &i, const geom::HalfSpace2D &j,
+                  v::DVec<2> &out) {
+  v::DVec<2> base;
+  if (geom::isSmol(i.n[0])) {
+    base = {0, (i.t - 1e-5) / i.n[1]};
+  } else {
+    base = {(i.t - 1e-5) / i.n[0], 0};
+  }
+  v::DVec<2> idir = {-i.n[1], i.n[0]};
+  double det = v::dot(idir, j.n);
+  if (det > 1e-15 || det < -1e-15) {
+    double dt = v::dot(base, j.n + 1e-5);
+    double shift = clampHelp((j.t - dt) / det);
+    out = base + shift * idir;
+    return true;
+  }
+  return false;
+}
 bool isUnbounded(const std::vector<geom::HalfSpace2D> &halfs) {
   std::size_t nh = halfs.size();
   std::vector<double> angles(nh);
@@ -70,7 +99,6 @@ bool isUnbounded(const std::vector<geom::HalfSpace2D> &halfs) {
   }
   return false;
 }
-
 /// 0 - succcess, 1 - infeasible, 2 - questionable feasibility
 /// at least one pair (two inds in halfs) is required in each ele of out
 /// if the ind is < 0, then it is just ~'ed and indicates it is optional
@@ -90,27 +118,52 @@ int slowEvalFaceHalfs(
   for (int i = nh; i--;) {
     for (int j = i; j--;) {
       v::DVec<2> toadd;
-      if (!geom::getCorner(halfs[j].as3(), halfs[i].as3(), toadd)) {
-        continue;
-      }
       bool shouldAdd = true;
       bool mandatory = true;
-      for (int k = nh; k--;) {
-        if (k == i || k == j) {
-          continue;
+      if (geom::getCorner(halfs[j].as3(), halfs[i].as3(), toadd)) {
+        for (int k = nh; k--;) {
+          if (k == i || k == j) {
+            continue;
+          }
+          double dt = v::dot(toadd, halfs[k].n);
+          if (dt > halfs[k].t + 1e-6) {
+            shouldAdd = false;
+            break;
+          }
+          if (dt > halfs[k].t) {
+            mandatory = false;
+          }
         }
-        double dt = v::dot(toadd, halfs[k].n);
-        if (dt > halfs[k].t + 1e-6) {
+        if (shouldAdd) {
+          mid += toadd;
+          numVerts++;
+        }
+      } else {
+        v::DVec<2> c0, c1;
+        if (absurdCorner(halfs[i], halfs[j], c0) &&
+            absurdCorner(halfs[j], halfs[i], c1)) {
+          for (int k = nh; k--;) {
+            if (k == i || k == j) {
+              continue;
+            }
+            double dt0 = v::dot(c0, halfs[k].n);
+            if (dt0 > halfs[k].t) {
+              double dt1 = v::dot(c1, halfs[k].n);
+              if (dt1 > halfs[k].t) {
+                shouldAdd = false;
+                break;
+              }
+            }
+          }
+          if (shouldAdd) {
+            mandatory = false;
+            toadd = c0 / 2. + c1 / 2.;
+          }
+        } else {
           shouldAdd = false;
-          break;
-        }
-        if (dt > halfs[k].t) {
-          mandatory = false;
         }
       }
       if (shouldAdd) {
-        mid += toadd;
-        numVerts++;
         if (mandatory) {
           verts.push_back({i, j, toadd});
         } else {
@@ -119,7 +172,7 @@ int slowEvalFaceHalfs(
       }
     }
   }
-  if (!verts.size()) {
+  if (!numVerts) {
     // infeasible
     return 1;
   }
@@ -225,8 +278,9 @@ void testEvaluateFace(OneIterConf iterC) {
       continue;
     }
     if (res == status) {
-      std::cerr << status << std::endl;
-      std::cerr << "incorrect evaluation of feasibility" << std::endl;
+      std::cerr << "incorrect evaluation of feasibility" << std::endl
+                << "expected " << (status ? "infeasible" : "feasible")
+                << std::endl;
       goto fail;
     }
     if (status) {
@@ -283,6 +337,6 @@ int main() {
   // testGetCorner({0, 10000000, 1000000, 1});
 
   // testEvaluateFace({0, 1, 1, 1});
-  testEvaluateFace({17409, 10000000, 1, 1});
+  testEvaluateFace({900837, 10000000, 1, 1});
   // testEvaluateFace({0, 10000000, 100000, 1});
 }

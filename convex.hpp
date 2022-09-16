@@ -53,16 +53,24 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b) {
   return 0;
 }
 /// 0 - keep all, 1 - infeasible, 2 - destroy b
-/// most important: a -> b -> c is clockwise
+/// precondition: a -> b -> c is clockwise, each turning <180deg
 int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   double detac = a[0] * c[1] - a[1] * c[0];
+  if (isSmol(detac) && a[0] * c[0] + a[1] * c[1] > 0 &&
+      a[0] * b[0] + a[1] * b[1] > 0) {
+    double anorm = v::norm2(v::DVec<2>{a[0], a[1]});
+    double bnorm = v::norm2(v::DVec<2>{b[0], b[1]});
+    double cnorm = v::norm2(v::DVec<2>{c[0], c[1]});
+    return 2 * (a[2] * bnorm <= b[2] * anorm && c[2] * bnorm <= b[2] * cnorm);
+  }
   // compare with getCorner's result dot product with {b[0], b[1]}
   double det3 =
       a[2] * (b[0] * c[1] - b[1] * c[0]) + c[2] * (a[0] * b[1] - a[1] * b[0]);
   det3 -= b[2] * detac;
   if (detac < 0) {
-    return 2 * (det3 >= 0);
+    return 2 * (det3 >= -1e-12);
   }
+  // return det3 >= -1e-12;
   return det3 > 0;
 }
 /// helper class
@@ -80,9 +88,15 @@ struct HalfSpace2D {
 void printHalfs(HalfSpace2D *ptr) {
   std::cout << "halfs: " << std::endl;
   HalfSpace2D *p = ptr;
+  int count = 0;
   do {
     std::cout << p->as3() << std::endl;
     p = p->nextp;
+    count++;
+    if (count > 1000) {
+      std::cerr << "halfs is broken" << std::endl;
+      throw std::exception();
+    }
   } while (p != ptr);
   std::cout << std::endl;
 }
