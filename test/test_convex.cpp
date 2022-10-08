@@ -90,11 +90,11 @@ bool isUnbounded(const std::vector<geom::HalfSpace2D> &halfs) {
   }
   std::sort(angles.begin(), angles.end());
   for (std::size_t i = nh; --i;) {
-    if (angles[i] - angles[i - 1] >= 3.14) {
+    if (angles[i] - angles[i - 1] >= 3.1) {
       return true;
     }
   }
-  if (angles[0] - angles.back() >= -3.143) {
+  if (angles[0] - angles.back() >= -3.2) {
     return true;
   }
   return false;
@@ -135,6 +135,7 @@ int slowEvalFaceHalfs(
           }
         }
         if (shouldAdd) {
+          DEBUG_PRINT("add: " << i << " " << j << ", mand? " << mandatory);
           mid += toadd;
           numVerts++;
         }
@@ -157,6 +158,7 @@ int slowEvalFaceHalfs(
           }
           if (shouldAdd) {
             mandatory = false;
+            DEBUG_PRINT("add: " << i << " " << j << ", mand? false");
             toadd = c0 / 2. + c1 / 2.;
           }
         } else {
@@ -337,6 +339,6 @@ int main() {
   // testGetCorner({0, 10000000, 1000000, 1});
 
   // testEvaluateFace({0, 1, 1, 1});
-  testEvaluateFace({900837, 10000000, 1, 1});
+  testEvaluateFace({6135694, 10000000, 1, 1});
   // testEvaluateFace({0, 10000000, 100000, 1});
 }

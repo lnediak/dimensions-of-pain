@@ -56,21 +56,21 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b) {
 /// precondition: a -> b -> c is clockwise, each turning <180deg
 int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   double detac = a[0] * c[1] - a[1] * c[0];
-  if (isSmol(detac) && a[0] * c[0] + a[1] * c[1] > 0 &&
-      a[0] * b[0] + a[1] * b[1] > 0) {
-    double anorm = v::norm2(v::DVec<2>{a[0], a[1]});
-    double bnorm = v::norm2(v::DVec<2>{b[0], b[1]});
-    double cnorm = v::norm2(v::DVec<2>{c[0], c[1]});
-    return 2 * (a[2] * bnorm <= b[2] * anorm && c[2] * bnorm <= b[2] * cnorm);
-  }
   // compare with getCorner's result dot product with {b[0], b[1]}
   double det3 =
       a[2] * (b[0] * c[1] - b[1] * c[0]) + c[2] * (a[0] * b[1] - a[1] * b[0]);
   det3 -= b[2] * detac;
+  if (isSmol(det3 * 1e5) && isSmol(detac) && a[0] * c[0] + a[1] * c[1] > 0 &&
+      a[0] * b[0] + a[1] * b[1] > 0) {
+    double anorm = v::norm2(v::DVec<2>{a[0], a[1]});
+    double bnorm = v::norm2(v::DVec<2>{b[0], b[1]});
+    double cnorm = v::norm2(v::DVec<2>{c[0], c[1]});
+    return 2 * (b[2] * anorm >= a[2] * bnorm && b[2] * cnorm >= c[2] * bnorm);
+  }
   if (detac < 0) {
     return 2 * (det3 >= -1e-12);
   }
-  // return det3 >= -1e-12;
+  // the det3 == 0 case is important
   return det3 > 0;
 }
 /// helper class
@@ -159,6 +159,7 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
     halfs[pi].nextp = &halfs[ni];
   }
   HalfSpace2D *begp = &halfs[0];
+  printHalfs(begp);
   HalfSpace2D *bptr = begp->nextp;
   while (bptr != begp) {
     bptr = clearCheckStat3(bptr, begp);
@@ -193,6 +194,7 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
     }
   }
   out.clear();
+  printHalfs(begp);
   ptr = begp;
   do {
     out.push_back(ptr - &halfs[0]);
