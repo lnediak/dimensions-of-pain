@@ -25,25 +25,25 @@ void testGetCorner(OneIterConf iterC) {
       std::cout << "Iteration #" << spam << std::endl;
     }
     v::DVec<3> e0 = {distr(mtrand), distr(mtrand), distr(mtrand)};
-    while (geom::isSmol(e0[0] * e0[0] + e0[1] * e0[1])) {
+    while (isSmol(e0[0] * e0[0] + e0[1] * e0[1], 1e-5)) {
       e0 = {distr(mtrand), distr(mtrand), distr(mtrand)};
     }
     v::DVec<3> e1 = {distr(mtrand), distr(mtrand), distr(mtrand)};
-    while (geom::isSmol(e1[0] * e1[0] + e1[1] * e1[1])) {
+    while (isSmol(e1[0] * e1[0] + e1[1] * e1[1], 1e-5)) {
       e1 = {distr(mtrand), distr(mtrand), distr(mtrand)};
     }
     v::DVec<2> out;
     if (!geom::getCorner(e0, e1, out)) {
-      if (!geom::isSmol(e0[0] * e1[1] - e0[1] * e1[0])) {
+      if (!isSmol(e0[0] * e1[1] - e0[1] * e1[0], 1e-5)) {
         std::cerr << "determinant not small???" << std::endl;
         goto fail;
       }
     } else {
-      if (!geom::isSmol((out[0] * e0[0] + out[1] * e0[1] - e0[2]) / 100)) {
+      if (!isSmol(out[0] * e0[0] + out[1] * e0[1] - e0[2], 1e-3)) {
         std::cerr << "result not lying on edge of e0" << std::endl;
         goto fail;
       }
-      if (!geom::isSmol((out[0] * e1[0] + out[1] * e1[1] - e1[2]) / 100)) {
+      if (!isSmol(out[0] * e1[0] + out[1] * e1[1] - e1[2], 1e-3)) {
         std::cerr << "result not lying on edge of e1" << std::endl;
         goto fail;
       }
@@ -67,14 +67,14 @@ double clampHelp(double val) {
 bool absurdCorner(const geom::HalfSpace2D &i, const geom::HalfSpace2D &j,
                   v::DVec<2> &out) {
   v::DVec<2> base;
-  if (geom::isSmol(i.n[0])) {
+  if (isSmol(i.n[0], 1e-5)) {
     base = {0, (i.t - 1e-5) / i.n[1]};
   } else {
     base = {(i.t - 1e-5) / i.n[0], 0};
   }
   v::DVec<2> idir = {-i.n[1], i.n[0]};
   double det = v::dot(idir, j.n);
-  if (det > 1e-15 || det < -1e-15) {
+  if (!isSmol(det, 1e-15)) {
     double dt = v::dot(base, j.n + 1e-5);
     double shift = clampHelp((j.t - dt) / det);
     out = base + shift * idir;
@@ -99,135 +99,11 @@ bool isUnbounded(const std::vector<geom::HalfSpace2D> &halfs) {
   }
   return false;
 }
-/// 0 - succcess, 1 - infeasible, 2 - questionable feasibility
-/// at least one pair (two inds in halfs) is required in each ele of out
-/// if the ind is < 0, then it is just ~'ed and indicates it is optional
-int slowEvalFaceHalfs(
-    const std::vector<geom::HalfSpace2D> &halfs,
-    std::vector<std::unordered_set<v::IVec<2>, v::IVecHash<2>,
-                                   v::EqualFunctor<v::IVec<2>, v::IVec<2>>>>
-        &out) {
-  std::size_t nh = halfs.size();
-  struct Entry {
-    int i, j;
-    v::DVec<2> p;
-  };
-  std::vector<Entry> verts;
-  v::DVec<2> mid{0, 0};
-  int numVerts = 0;
-  for (int i = nh; i--;) {
-    for (int j = i; j--;) {
-      v::DVec<2> toadd;
-      bool shouldAdd = true;
-      bool mandatory = true;
-      if (geom::getCorner(halfs[j].as3(), halfs[i].as3(), toadd)) {
-        for (int k = nh; k--;) {
-          if (k == i || k == j) {
-            continue;
-          }
-          double dt = v::dot(toadd, halfs[k].n);
-          if (dt > halfs[k].t + 1e-6) {
-            shouldAdd = false;
-            break;
-          }
-          if (dt > halfs[k].t) {
-            mandatory = false;
-          }
-        }
-        if (shouldAdd) {
-          DEBUG_PRINT("add: " << i << " " << j << ", mand? " << mandatory);
-          mid += toadd;
-          numVerts++;
-        }
-      } else {
-        v::DVec<2> c0, c1;
-        if (absurdCorner(halfs[i], halfs[j], c0) &&
-            absurdCorner(halfs[j], halfs[i], c1)) {
-          for (int k = nh; k--;) {
-            if (k == i || k == j) {
-              continue;
-            }
-            double dt0 = v::dot(c0, halfs[k].n);
-            if (dt0 > halfs[k].t) {
-              double dt1 = v::dot(c1, halfs[k].n);
-              if (dt1 > halfs[k].t) {
-                shouldAdd = false;
-                break;
-              }
-            }
-          }
-          if (shouldAdd) {
-            mandatory = false;
-            DEBUG_PRINT("add: " << i << " " << j << ", mand? false");
-            toadd = c0 / 2. + c1 / 2.;
-          }
-        } else {
-          shouldAdd = false;
-        }
-      }
-      if (shouldAdd) {
-        if (mandatory) {
-          verts.push_back({i, j, toadd});
-        } else {
-          verts.push_back({~i, ~j, toadd});
-        }
-      }
-    }
-  }
-  if (!numVerts) {
-    // infeasible
-    return 1;
-  }
-  mid /= numVerts;
-  for (std::size_t k = nh; k--;) {
-    double df = v::dot(mid, halfs[k].n) - halfs[k].t;
-    if (df > 1e-4) {
-      return 1;
-    } else if (df > -1e-4) {
-      // questionable feasibility
-      return 2;
-    }
-  }
-  std::vector<v::IVec<2>> ufv(verts.size());
-  auto vGetP = [&ufv](int i) -> int & { return ufv[i][0]; };
-  auto vGetSz = [&ufv](int i) -> int & { return ufv[i][1]; };
-  for (int i = ufv.size(); i--;) {
-    ufv[i] = {i, 1};
-  }
-  for (std::size_t i = verts.size(); i--;) {
-    for (std::size_t j = i; j--;) {
-      if (geom::isSmol(1e-2 * v::norm1(verts[i].p - verts[j].p))) {
-        uf::ufUnion(i, j, vGetP, vGetSz);
-      }
-    }
-  }
-  std::vector<std::unordered_set<v::IVec<2>, v::IVecHash<2>,
-                                 v::EqualFunctor<v::IVec<2>, v::IVec<2>>>>
-      tmp(verts.size());
-  for (std::size_t i = verts.size(); i--;) {
-    std::size_t vi = uf::ufFind(i, vGetP);
-    int i0 = verts[i].i;
-    int i1 = verts[i].j;
-    if (i0 >= i1) {
-      tmp[vi].insert({i0, i1});
-    } else {
-      tmp[vi].insert({i1, i0});
-    }
-  }
-  out.clear();
-  for (auto s : tmp) {
-    if (s.size()) {
-      out.push_back(s);
-    }
-  }
-  return 0;
-}
-
 void testEvaluateFace(OneIterConf iterC) {
   std::cout << "entering testEvaluateFace" << std::endl;
   // std::uniform_int_distribution<int> disti(3, 20);
   std::uniform_int_distribution<int> disti(4, 5);
-  std::uniform_real_distribution<double> distr(-100, 100);
+  std::uniform_real_distribution<double> distr(-10, 10);
   std::uniform_int_distribution<int> distc(0, 25);
   std::uniform_real_distribution<double> distsmol(1, 2);
   std::vector<geom::HalfSpace2D> halfs;

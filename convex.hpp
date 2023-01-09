@@ -17,14 +17,14 @@ template <std::size_t N, class Attr> struct HalfSpace {
   bool contains(const v::DVec<N> &p) const { return v::dot(p, n) <= t; }
 };
 
-namespace geom {
+bool isSmol(double d, double err) { return -err < d && d < err; }
 
-bool isSmol(double d) { return -1e-5 < d && d < 1e-5; }
+namespace geom {
 
 /// my vec3s are just [a, b, t] where ax+by<=t is the half-space represented
 bool getCorner(const v::DVec<3> &e0, const v::DVec<3> &e1, v::DVec<2> &out) {
   double det = e0[0] * e1[1] - e0[1] * e1[0];
-  if (isSmol(det)) {
+  if (isSmol(det, 1e-5)) {
     return false;
   }
   out[0] = e1[1] * e0[2] - e0[1] * e1[2];
@@ -34,23 +34,11 @@ bool getCorner(const v::DVec<3> &e0, const v::DVec<3> &e1, v::DVec<2> &out) {
 }
 /// for sorting
 double getAngleThing(v::DVec<2> n) {
-  n /= v::norm1(n);
+  double n0 = n[0] / v::norm1(n);
   if (n[1] >= 0) {
-    return 1 - n[0];
+    return 1 - n0;
   }
-  return 3 + n[0];
-}
-/// 0 - normal, 1 - infeasible, 2 - destroy a, 3 - destroy b
-int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b) {
-  if (isSmol(a[0] * b[1] - a[1] * b[0])) {
-    double dt = a[0] * b[0] + a[1] * b[1];
-    double da = a[0] * a[0] + a[1] * a[1];
-    if (dt < 0) {
-      return b[2] * da < a[2] * dt;
-    }
-    return 2 + (b[2] * da >= a[2] * dt);
-  }
-  return 0;
+  return 3 + n0;
 }
 /// 0 - keep all, 1 - infeasible, 2 - destroy b
 /// precondition: a -> b -> c is clockwise, each turning <180deg
@@ -60,7 +48,7 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   double det3 =
       a[2] * (b[0] * c[1] - b[1] * c[0]) + c[2] * (a[0] * b[1] - a[1] * b[0]);
   det3 -= b[2] * detac;
-  if (isSmol(det3 * 1e5) && isSmol(detac) && a[0] * c[0] + a[1] * c[1] > 0 &&
+  if (isSmol(det3, 1e-12) && isSmol(detac, 1e-10) && a[0] * c[0] + a[1] * c[1] > 0 &&
       a[0] * b[0] + a[1] * b[1] > 0) {
     double anorm = v::norm2(v::DVec<2>{a[0], a[1]});
     double bnorm = v::norm2(v::DVec<2>{b[0], b[1]});
@@ -70,7 +58,6 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   if (detac < 0) {
     return 2 * (det3 >= -1e-12);
   }
-  // the det3 == 0 case is important
   return det3 > 0;
 }
 /// helper class
@@ -100,33 +87,6 @@ void printHalfs(HalfSpace2D *ptr) {
   } while (p != ptr);
   std::cout << std::endl;
 }
-/// assumes ptr has nextp and prevp set up, links to bounded face
-HalfSpace2D *clearCheckStat2(HalfSpace2D *ptr, HalfSpace2D **begp) {
-  while (true) {
-    int status = checkStatus(ptr->nextp->as3(), ptr->as3());
-    switch (status) {
-    case 0:
-      return ptr;
-    case 1:
-      return nullptr;
-    case 2:
-      if (ptr->nextp == *begp) {
-        *begp = ptr;
-      }
-      ptr->nextp = ptr->nextp->nextp;
-      ptr->nextp->prevp = ptr;
-      break;
-    default: // case 3
-      if (ptr == *begp) {
-        *begp = ptr->nextp;
-      }
-      ptr->prevp->nextp = ptr->nextp;
-      ptr->nextp->prevp = ptr->prevp;
-      ptr = ptr->nextp;
-    }
-  }
-  return ptr;
-}
 /// ptr points to `b` as passed to checkStatus
 template <HalfSpace2D *HalfSpace2D::*prevp = &HalfSpace2D::prevp>
 HalfSpace2D *clearCheckStat3(HalfSpace2D *ptr, HalfSpace2D *begp) {
@@ -145,14 +105,21 @@ HalfSpace2D *clearCheckStat3(HalfSpace2D *ptr, HalfSpace2D *begp) {
   }
   return ptr;
 }
-/// precondition: halfs describes a bounded face or is infeasible
-/// returns true on success, false on infeasibility
+/// 0 - success, 1 - infeasible, 2 - unbounded
 /// out is a vector of indices in halfs (as it is after the function)
-bool evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
+int evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
+  if (halfs.size() < 3) {
+    return 2;
+  }
   for (HalfSpace2D &half : halfs) {
     half.tmp = getAngleThing(half.n);
   }
   std::sort(halfs.begin(), halfs.end());
+  for (std::size_t i = 1, sz = halfs.size(); i < sz; i++) {
+    if (halfs[i].tmp - halfs[i - 1].tmp >= 2 - 1e-8) {
+      return 2;
+    }
+  }
   // i love circular doubly linked lists
   for (std::size_t ni = 0, pi = halfs.size(); pi--; ni = pi) {
     halfs[ni].prevp = &halfs[pi];
@@ -162,18 +129,18 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
   printHalfs(begp);
   HalfSpace2D *bptr = begp->nextp;
   while (bptr != begp) {
+    if (begp == begp->nextp->nextp) {
+      return 1;
+    }
     bptr = clearCheckStat3(bptr, begp);
     if (!bptr) {
-      return false;
+      return 1;
     }
     bptr = bptr->nextp;
   }
-  if (begp == begp->nextp) {
-    return false;
-  }
   HalfSpace2D *tmp = clearCheckStat3(begp, nullptr);
   if (!tmp) {
-    return false;
+    return 1;
   }
   // now we know that it is feasible yay
   bool isClear = tmp == begp;
@@ -200,7 +167,7 @@ bool evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
     out.push_back(ptr - &halfs[0]);
     ptr = ptr->nextp;
   } while (ptr != begp);
-  return true;
+  return 0;
 }
 
 } // namespace geom
@@ -218,35 +185,78 @@ template <std::size_t N, class Attr> struct Polytope {
     return true;
   }
 
-  std::vector<v::DVec<4>> tmp;
+  std::vector<std::pair<v::DVec<3>, double>> tmp;
+  std::vector<HalfSpace2D> tmp2;
+  std::vector<int> tmp3;
+  std::vector<v::DVec<3>> tmp4;
+  /// calls fun(v::DVec<3>, v::DVec<3>, v::DVec<3>) for each triangle
   template <class Fun> void writeTriangles(const SliceDirs<N> &sd, Fun &&fun) {
     tmp.clear();
     tmp.reserve(halfSpaces.size());
+    tmp2.reserve(halfSpaces.size());
     for (auto &half : halfSpaces) {
       v::DVec<3> n3 = {v::dot(sd.r, half.n), v::dot(sd.u, half.n),
                        v::dot(sd.f, half.n)};
       double t3 = half.t - v::dot(sd.c, half.n);
-      // I don't actually need to normalize it, but I don't like smol numbers
       double norm1 = v::norm1(n3);
       if (norm1 < 1e-8) {
         return;
       }
       n3 /= norm1;
       t3 /= norm1;
-      tmp.push_back({n3[0], n3[1], n3[2], t3});
+      tmp.emplace_back(n3, t3);
     }
-    for (auto it = tmp.begin(), ite = tmp.end(); it != ite; ++it) {
-      v::DVec<3> n3 = {(*it)[0], (*it)[1], (*it)[2]};
-      double t3 = (*it)[3];
+    for (int i = 0, sz = tmp.size(); i < sz; i++) {
+      v::DVec<3> n3 = tmp[i].first;
+      double t3 = tmp[i].second;
       v::DVec<3> a = {1, 0, 0};
-      if (geom::isSmol(n3[1]) && geom::isSmol(n3[2])) {
+      if (isSmol(n3[1], 1e-5) && isSmol(n3[2], 1e-5)) {
         a[1] = 1;
       }
       double nor2 = v::norm2(n3);
       a -= (v::dot(a, n3) / nor2) * n3;
       v::DVec<3> b = cross3(a, n3);
       v::DVec<3> c = (t3 / nor2) * n3;
-      // process da 2d face here
+      tmp2.clear();
+      // FIXME: use vertex graph in 3D instead of following slow
+      for (int j = 0; j < sz; j++) {
+        if (j == i) {
+          continue;
+        }
+        v::DVec<2> n2 = {v::dot(a, tmp[j].first), v::dot(b, tmp[j].first)};
+        double t2 = tmp[j].second - v::dot(c, tmp[j].first);
+        double norm2 = v::norm2(n2);
+        if (isSmol(norm2, 1e-10)) {
+          continue;
+        }
+        double norm = std::sqrt(norm);
+        HalfPlane2D toadd;
+        toadd.n = n2 / norm;
+        toadd.t = t2 / norm;
+        tmp2.push_back(toadd);
+      }
+      if (tmp2.size() < 3) {
+        continue;
+      }
+      // infeasable or unbounded
+      if (evaluateFace(tmp2, tmp3)) {
+        continue;
+      }
+      tmp4.clear();
+      for (std::size_t i = 0, j = tmp3.size() - 1, sz = tmp3.size(); i < sz;
+           j = i++) {
+        v::DVec<2> corner;
+        if (!getCorner(tmp2[tmp3[i]], tmp2[tmp3[j]], corner)) {
+          continue;
+        }
+        tmp4.push_back(corner[0] * a + corner[1] * b + c);
+      }
+      if (tmp4.size() < 3) {
+        continue;
+      }
+      for (std::size_t i = 2, sz = tmp4.size(); i < sz; i++) {
+        fun(tmp4[0], tmp4[i - 1], tmp4[i]);
+      }
     }
   }
 };
