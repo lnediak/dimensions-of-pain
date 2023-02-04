@@ -48,8 +48,8 @@ int checkStatus(const v::DVec<3> &a, const v::DVec<3> &b, const v::DVec<3> &c) {
   double det3 =
       a[2] * (b[0] * c[1] - b[1] * c[0]) + c[2] * (a[0] * b[1] - a[1] * b[0]);
   det3 -= b[2] * detac;
-  if (isSmol(det3, 1e-12) && isSmol(detac, 1e-10) && a[0] * c[0] + a[1] * c[1] > 0 &&
-      a[0] * b[0] + a[1] * b[1] > 0) {
+  if (isSmol(det3, 1e-12) && isSmol(detac, 1e-10) &&
+      a[0] * c[0] + a[1] * c[1] > 0 && a[0] * b[0] + a[1] * b[1] > 0) {
     double anorm = v::norm2(v::DVec<2>{a[0], a[1]});
     double bnorm = v::norm2(v::DVec<2>{b[0], b[1]});
     double cnorm = v::norm2(v::DVec<2>{c[0], c[1]});
@@ -66,6 +66,7 @@ struct HalfSpace2D {
   double t;
   double tmp;
   HalfSpace2D *nextp, *prevp;
+  HalfSpace2D() : n{}, t{}, tmp{} {}
   HalfSpace2D(const v::DVec<2> &n, double t) : n(n), t(t) {}
   HalfSpace2D(const v::DVec<3> &abt) : n{abt[0], abt[1]}, t(abt[2]) {}
   bool operator<(const HalfSpace2D &o) const { return tmp < o.tmp; }
@@ -186,7 +187,7 @@ template <std::size_t N, class Attr> struct Polytope {
   }
 
   std::vector<std::pair<v::DVec<3>, double>> tmp;
-  std::vector<HalfSpace2D> tmp2;
+  std::vector<geom::HalfSpace2D> tmp2;
   std::vector<int> tmp3;
   std::vector<v::DVec<3>> tmp4;
   /// calls fun(v::DVec<3>, v::DVec<3>, v::DVec<3>) for each triangle
@@ -230,7 +231,7 @@ template <std::size_t N, class Attr> struct Polytope {
           continue;
         }
         double norm = std::sqrt(norm);
-        HalfPlane2D toadd;
+        geom::HalfSpace2D toadd;
         toadd.n = n2 / norm;
         toadd.t = t2 / norm;
         tmp2.push_back(toadd);
@@ -246,7 +247,8 @@ template <std::size_t N, class Attr> struct Polytope {
       for (std::size_t i = 0, j = tmp3.size() - 1, sz = tmp3.size(); i < sz;
            j = i++) {
         v::DVec<2> corner;
-        if (!getCorner(tmp2[tmp3[i]], tmp2[tmp3[j]], corner)) {
+        if (!geom::getCorner(tmp2[tmp3[i]].as3(), tmp2[tmp3[j]].as3(),
+                             corner)) {
           continue;
         }
         tmp4.push_back(corner[0] * a + corner[1] * b + c);
