@@ -72,8 +72,11 @@ struct HalfSpace2D {
   bool operator<(const HalfSpace2D &o) const { return tmp < o.tmp; }
   v::DVec<3> as3() const { return {n[0], n[1], t}; }
 };
+#define DO_PRINT_HALFS 0
 /// for debugging, obviously
 void printHalfs(HalfSpace2D *ptr) {
+  (void)ptr;
+#if DO_PRINT_HALFS
   std::cout << "halfs: " << std::endl;
   HalfSpace2D *p = ptr;
   int count = 0;
@@ -87,6 +90,7 @@ void printHalfs(HalfSpace2D *ptr) {
     }
   } while (p != ptr);
   std::cout << std::endl;
+#endif
 }
 /// ptr points to `b` as passed to checkStatus
 template <HalfSpace2D *HalfSpace2D::*prevp = &HalfSpace2D::prevp>
@@ -120,6 +124,9 @@ int evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
     if (halfs[i].tmp - halfs[i - 1].tmp >= 2 - 1e-8) {
       return 2;
     }
+  }
+  if (halfs[0].tmp - halfs.back().tmp >= -2 - 1e-8) {
+    return 2;
   }
   // i love circular doubly linked lists
   for (std::size_t ni = 0, pi = halfs.size(); pi--; ni = pi) {

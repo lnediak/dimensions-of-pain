@@ -59,6 +59,9 @@ void testGetCorner(OneIterConf iterC) {
 int getBoundedness(const std::vector<geom::HalfSpace2D> &halfs,
                    double low = 3.1, double high = 3.2) {
   std::size_t nh = halfs.size();
+  if (!nh) {
+    return 1;
+  }
   std::vector<double> angles(nh);
   for (std::size_t i = nh; i--;) {
     angles[i] = std::atan2(halfs[i].n[1], halfs[i].n[0]);
@@ -84,12 +87,17 @@ int getBoundedness(const std::vector<geom::HalfSpace2D> &halfs,
 // absolutely cursed, but I don't know of an easier way for this to be stable
 double binsearchBorder(const v::DVec<2> &base, const v::DVec<2> &dir,
                        const v::DVec<2> &n, double t, bool &isIncreasing) {
-  double low = -1e9;
-  double high = 1e9;
+  double low = -1e8;
+  double high = 1e8;
   double det = v::dot(dir, n);
   isIncreasing = det >= 0;
-  while (high - low > 1e-8) {
+  int iteri = 0;
+  while (high - low > 2e-8) {
     double mid = (low + high) / 2;
+    iteri++;
+    if (!(iteri % 100000000)) {
+      std::cout << low << " " << high << " " << mid << std::endl;
+    }
     double crit = v::dot(base + mid * dir, n);
     if ((crit <= t && isIncreasing) || (crit > t && !isIncreasing)) {
       low = mid;
@@ -115,10 +123,10 @@ int getRelevantPoint(const std::vector<geom::HalfSpace2D> &halfs,
     base = {t / n[0], 0};
   }
   v::DVec<2> dir = {-n[1], n[0]};
-  double lowmax = -1e9;
-  double lowmin = -1e9;
-  double highmax = 1e9;
-  double highmin = 1e9;
+  double lowmax = -1e8;
+  double lowmin = -1e8;
+  double highmax = 1e8;
+  double highmin = 1e8;
   for (int i : indices) {
     if (i == index) {
       continue;
@@ -299,8 +307,9 @@ bool isValidSolution(const std::vector<geom::HalfSpace2D> &halfs,
   return true;
 }
 
-void printFail(int iteri) {
-  std::cerr << "Failed on iteration #" << iteri << std::endl;
+void printFail(int iteri, int linei) {
+  std::cerr << "Failed on iteration #" << iteri << ", line #" << linei
+            << std::endl;
   throw std::exception();
 }
 void testEvaluateFace(OneIterConf iterC) {
@@ -317,19 +326,19 @@ void testEvaluateFace(OneIterConf iterC) {
     int boundedness = getBoundedness(halfs);
     int res = geom::evaluateFace(halfs, indices);
     if (!res) {
-      if (subBoundedness(halfs, indices, 3.14159, 3.141595)) {
-        printFail(iteri);
+      if (subBoundedness(halfs, indices, 3.141595, 3.14159)) {
+        printFail(iteri, __LINE__);
       }
     }
     if (boundedness == 1 && res != 2) {
-      printFail(iteri);
+      printFail(iteri, __LINE__);
     }
     if (!boundedness) {
       if (res) {
-        printFail(iteri);
+        printFail(iteri, __LINE__);
       }
       if (!isValidSolution(halfs, indices)) {
-        printFail(iteri);
+        printFail(iteri, __LINE__);
       }
     }
 
@@ -338,31 +347,31 @@ void testEvaluateFace(OneIterConf iterC) {
     res = geom::evaluateFace(halfs, indices);
     if (!res) {
       if (subBoundedness(halfs, indices, 3.141595, 3.14159)) {
-        printFail(iteri);
+        printFail(iteri, __LINE__);
       }
     }
     if (boundedness == 1 && res != 2) {
-      printFail(iteri);
+      printFail(iteri, __LINE__);
     }
     if (!boundedness && res == 2) {
-      printFail(iteri);
+      printFail(iteri, __LINE__);
     }
 
     addInfeasible(rands, halfs);
     boundedness = getBoundedness(halfs);
     res = geom::evaluateFace(halfs, indices);
     if (!res) {
-      printFail(iteri);
+      printFail(iteri, __LINE__);
     }
     if (!boundedness && res == 2) {
-      printFail(iteri);
+      printFail(iteri, __LINE__);
     }
   }
 }
 
 int main() {
-  std::cout << std::setprecision(15);
+  std::cout << std::setprecision(17);
   // testGetCorner({0, 10000000, 1000000, 1});
 
-  testEvaluateFace({0, 10000000, 100000, 1});
+  testEvaluateFace({0, 10000000, 10000, 1});
 }
