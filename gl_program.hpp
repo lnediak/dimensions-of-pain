@@ -14,15 +14,23 @@ struct GLProgram {
   GLuint prog;
   GLuint posLoc;
   GLuint colLoc;
+  GLuint projMatLoc;
 
   GLProgram() : prog(0) {}
   GLProgram(const GLProgram &) = delete;
-  GLProgram(GLProgram &&other) : prog(other.prog) { other.prog = 0; }
+  GLProgram(GLProgram &&o)
+      : prog(o.prog), posLoc(o.posLoc), colLoc(o.colLoc),
+        projMatLoc(o.projMatLoc) {
+    o.prog = 0;
+  }
   GLProgram &operator=(const GLProgram &) = delete;
   GLProgram &operator=(GLProgram &&other) {
     if (prog != other.prog) {
       this->~GLProgram();
       prog = other.prog;
+      posLoc = other.posLoc;
+      colLoc = other.colLoc;
+      projMatLoc = other.projMatLoc;
     }
     other.prog = 0;
     return *this;
@@ -38,8 +46,9 @@ struct GLProgram {
                        "in vec3 pos;"
                        "in vec4 col;"
                        "out vec4 outCol;"
+                       "uniform mat4 projMat;"
                        "void main() {"
-                       "  gl_Position = vec4(pos, 1.0);"
+                       "  gl_Position = projMat * vec4(pos, 1.0);"
                        "  outCol = col;"
                        "}";
     std::string fsrc = "#version 130\n"
@@ -85,6 +94,16 @@ struct GLProgram {
 
     posLoc = glGetAttribLocation(prog, "pos");
     colLoc = glGetAttribLocation(prog, "col");
+    projMatLoc = glGetUniformLocation(prog, "projMat");
+  }
+
+  /// row-major please
+  void setProjMat(const double *p) {
+    GLfloat mat[16];
+    for (int i = 0; i < 16; i++) {
+      mat[i] = p[i];
+    }
+    glUniformMatrix4fv(projMatLoc, 1, GL_TRUE, mat);
   }
 
 private:
@@ -168,7 +187,7 @@ struct GLMesh {
     }
     if (!buf) {
       glGenVertexArrays(1, &vao);
-      init(nsz, data);
+      initData(nsz, data);
       return;
     }
     nverts = nsz / BYTES_PER_VERT;
@@ -176,7 +195,7 @@ struct GLMesh {
     if (nsz > sz) {
       glBufferData(GL_ARRAY_BUFFER, nsz, data, GL_DYNAMIC_DRAW);
     } else {
-      glBufferSubData(GL_ARRAY_BUFFER, 0, nsz, data, GL_DYNAMIC_DRAW);
+      glBufferSubData(GL_ARRAY_BUFFER, 0, nsz, data);
     }
   }
 
@@ -212,6 +231,7 @@ struct GLTrianglesRecorder {
     }
     meshes.push_back(&tag);
     glBindVertexArray(tag.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, tag.buf);
     glVertexAttribPointer(prog.posLoc, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
                           0);
     glVertexAttribPointer(prog.colLoc, 4, GL_UNSIGNED_BYTE, GL_TRUE,
@@ -225,6 +245,15 @@ struct GLTrianglesRecorder {
     }
   }
 
+  void setProjMat(const double *mat) { prog.setProjMat(mat); }
+  void setDefaultProjMat(double rm, double um, double fm) {
+    double mat[][4] = {{1. / rm, 0, 0, 0},
+                       {0, 1. / um, 0, 0},
+                       {0, 0, (fm + 1) / (fm - 1), -2 * fm / (fm - 1)},
+                       {0, 0, 1, 0}};
+    setProjMat(&mat[0][0]);
+  }
+
   void renderAll() const {
     for (GLMesh *mesh : meshes) {
       glBindVertexArray(mesh->vao);
@@ -234,4 +263,3 @@ struct GLTrianglesRecorder {
 };
 
 #endif // GL_PROGRAM_HPP_
-

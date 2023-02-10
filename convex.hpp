@@ -2,6 +2,7 @@
 #define CONVEX_HPP_
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <list>
 #include <vector>
@@ -184,6 +185,9 @@ int evaluateFace(std::vector<HalfSpace2D> &halfs, std::vector<int> &out) {
 template <std::size_t N, class Attr> struct Polytope {
   std::vector<HalfSpace<N, Attr>> halfSpaces;
 
+  Polytope() {}
+  Polytope(std::initializer_list<HalfSpace<N, Attr>> lst) : halfSpaces(lst) {}
+
   bool contains(const v::DVec<N> &p) const {
     for (const HalfSpace<N, Attr> &h : halfSpaces) {
       if (!h.contains(p)) {
@@ -193,11 +197,20 @@ template <std::size_t N, class Attr> struct Polytope {
     return true;
   }
 
-  std::vector<std::pair<v::DVec<3>, double>> tmp;
+private:
+  struct HalfSpace3D {
+    v::DVec<3> n;
+    double t;
+    Attr *attr;
+  };
+  std::vector<HalfSpace3D> tmp;
   std::vector<geom::HalfSpace2D> tmp2;
   std::vector<int> tmp3;
   std::vector<v::DVec<3>> tmp4;
-  /// calls fun(v::DVec<3>, v::DVec<3>, v::DVec<3>) for each triangle
+
+public:
+  /// calls fun(v::DVec<3>, v::DVec<3>, v::DVec<3>, Attr &) for each triangle
+  /// triangles produced are ccw
   template <class Fun> void writeTriangles(const SliceDirs<N> &sd, Fun &&fun) {
     tmp.clear();
     tmp.reserve(halfSpaces.size());
@@ -212,18 +225,19 @@ template <std::size_t N, class Attr> struct Polytope {
       }
       n3 /= norm1;
       t3 /= norm1;
-      tmp.emplace_back(n3, t3);
+      tmp.push_back({n3, t3, &half.attr});
     }
     for (int i = 0, sz = tmp.size(); i < sz; i++) {
-      v::DVec<3> n3 = tmp[i].first;
-      double t3 = tmp[i].second;
+      v::DVec<3> n3 = tmp[i].n;
+      double t3 = tmp[i].t;
+      Attr &attr = *tmp[i].attr;
       v::DVec<3> a = {1, 0, 0};
       if (isSmol(n3[1], 1e-5) && isSmol(n3[2], 1e-5)) {
         a[1] = 1;
       }
       double nor2 = v::norm2(n3);
       a -= (v::dot(a, n3) / nor2) * n3;
-      v::DVec<3> b = cross3(a, n3);
+      v::DVec<3> b = cross3(a, n3); // since we are in left-handed 3D
       v::DVec<3> c = (t3 / nor2) * n3;
       tmp2.clear();
       // FIXME: use vertex graph in 3D instead of following slow
@@ -231,13 +245,13 @@ template <std::size_t N, class Attr> struct Polytope {
         if (j == i) {
           continue;
         }
-        v::DVec<2> n2 = {v::dot(a, tmp[j].first), v::dot(b, tmp[j].first)};
-        double t2 = tmp[j].second - v::dot(c, tmp[j].first);
+        v::DVec<2> n2 = {v::dot(a, tmp[j].n), v::dot(b, tmp[j].n)};
+        double t2 = tmp[j].t - v::dot(c, tmp[j].n);
         double norm2 = v::norm2(n2);
         if (isSmol(norm2, 1e-10)) {
           continue;
         }
-        double norm = std::sqrt(norm);
+        double norm = std::sqrt(norm2);
         geom::HalfSpace2D toadd;
         toadd.n = n2 / norm;
         toadd.t = t2 / norm;
@@ -264,7 +278,7 @@ template <std::size_t N, class Attr> struct Polytope {
         continue;
       }
       for (std::size_t i = 2, sz = tmp4.size(); i < sz; i++) {
-        fun(tmp4[0], tmp4[i - 1], tmp4[i]);
+        fun(tmp4[0], tmp4[i - 1], tmp4[i], attr);
       }
     }
   }
